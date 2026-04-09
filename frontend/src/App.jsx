@@ -1,177 +1,268 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import './App.css';
+
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
+
+const tabs = [
+  { id: 'main', label: 'Главная' },
+  { id: 'payments', label: 'Платежи' },
+  { id: 'credits', label: 'Кредиты' },
+  { id: 'analytics', label: 'Аналитика' },
+];
+
+const quickActions = [
+  { icon: '↗', title: 'Перевод' },
+  { icon: '◉', title: 'Оплатить' },
+  { icon: '◎', title: 'История' },
+  { icon: '⌁', title: 'Поддержка' },
+];
+
+const products = [
+  { title: 'СберКарта', subtitle: 'зарплатный счёт • 8452', amount: 184520, tone: 'emerald' },
+  { title: 'Кредитная карта', subtitle: 'льготный период 12 дней', amount: -199999.69, tone: 'graphite' },
+  { title: 'Накопительный счёт', subtitle: 'ставка 14.5% годовых', amount: 326400, tone: 'mint' },
+];
+
+const transactions = [
+  { title: 'Погашение кредита', meta: 'Сегодня • автосписание', amount: -24500, badge: 'Кредит' },
+  { title: 'Зарплата ООО Проект', meta: 'Сегодня • входящий перевод', amount: 98000, badge: 'Доход' },
+  { title: 'Монетка', meta: 'Сегодня • продукты', amount: -2198.45, badge: 'Покупка' },
+];
+
+const assistantPrompts = {
+  forgot: [
+    'Напомнить клиенту о платеже за 3 и за 1 день до даты списания.',
+    'Предложить автоплатёж или перенос даты списания под день зарплаты.',
+    'Оставить мягкий контактный сценарий без давления и штрафных мер.',
+  ],
+  worried: [
+    'Проверить возможность кредитных каникул или частичной реструктуризации.',
+    'Снизить ежемесячную нагрузку за счёт пересмотра графика.',
+    'Подключить менеджера с персональным сценарием удержания клиента.',
+  ],
+  bankruptcy: [
+    'Передать кейс в приоритетную обработку службы сопровождения.',
+    'Собрать документы по доходу, занятости и текущей долговой нагрузке.',
+    'Предложить антикризисный план: реструктуризация, пауза, снижение платежа.',
+  ],
+};
+
+const scenarioLabels = {
+  forgot: 'Низкий риск',
+  worried: 'Средний риск',
+  bankruptcy: 'Высокий риск',
+};
+
+const scenarioThemes = {
+  forgot: {
+    tone: 'positive',
+    title: 'Клиент скорее всего не проблемный',
+    subtitle: 'Платёжная дисциплина в норме, риск связан скорее с забывчивостью.',
+  },
+  worried: {
+    tone: 'warning',
+    title: 'Есть признаки финансового напряжения',
+    subtitle: 'Стоит предложить мягкое сопровождение и пересмотр условий.',
+  },
+  bankruptcy: {
+    tone: 'critical',
+    title: 'Требуется раннее вмешательство',
+    subtitle: 'Модель видит высокий шанс серьёзной просрочки или ухода в дефолт.',
+  },
+};
+
+function formatMoney(value) {
+  return new Intl.NumberFormat('ru-RU', {
+    style: 'currency',
+    currency: 'RUB',
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatPercent(value) {
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function getRandomItem(items) {
+  return items[Math.floor(Math.random() * items.length)];
+}
+
+function generateRandomClient() {
+  const scenarios = ['forgot', 'worried', 'bankruptcy'];
+  const scenario = getRandomItem(scenarios);
+
+  if (scenario === 'bankruptcy') {
+    return {
+      scenario,
+      data: {
+        monthly_payment: Math.round(Math.random() * 30000 + 28000),
+        monthly_income: Math.round(Math.random() * 18000 + 18000),
+        total_expenses: Math.round(Math.random() * 12000 + 14000),
+        tenure_months: Math.floor(Math.random() * 12 + 4),
+        total_overdue_days: Math.floor(Math.random() * 70 + 45),
+        age: Math.floor(Math.random() * 18 + 34),
+        credit_score: Math.floor(Math.random() * 180 + 320),
+        num_loans: Math.floor(Math.random() * 4 + 3),
+        employment_years: Number((Math.random() * 3 + 1).toFixed(1)),
+        num_past_delinquencies: Math.floor(Math.random() * 5 + 3),
+        has_bankruptcy: 1,
+        dti_ratio: Number((Math.random() * 0.3 + 0.62).toFixed(2)),
+        payment_to_income_ratio: Number((Math.random() * 0.25 + 0.52).toFixed(2)),
+        loan_rate: Number((Math.random() * 9 + 24).toFixed(1)),
+        num_credit_contracts: Math.floor(Math.random() * 4 + 4),
+        num_closed_loans: Math.floor(Math.random() * 2),
+        max_overdue_days: Math.floor(Math.random() * 90 + 50),
+        requested_amount: Math.round(Math.random() * 320000 + 280000),
+        approved_amount: Math.round(Math.random() * 220000 + 180000),
+        children_count: Math.floor(Math.random() * 3 + 1),
+        living_area_sqm: Math.round(Math.random() * 30 + 35),
+        work_experience_total_years: Math.floor(Math.random() * 6 + 3),
+        has_higher_education: Math.random() > 0.65 ? 1 : 0,
+        is_salary_client: 0,
+        has_credit_card: 1,
+        uses_mobile_banking: 1,
+        marital_status: getRandomItem(['разведён', 'холост']),
+        income_source: getRandomItem(['самозанятость', 'бизнес']),
+        employment_type: getRandomItem(['самозанятый', 'ИП']),
+        position_level: 'специалист',
+        loan_purpose: getRandomItem(['неотложные расходы', 'ремонт']),
+        client_segment: 'массовый',
+      },
+    };
+  }
+
+  if (scenario === 'worried') {
+    return {
+      scenario,
+      data: {
+        monthly_payment: Math.round(Math.random() * 16000 + 14000),
+        monthly_income: Math.round(Math.random() * 24000 + 42000),
+        total_expenses: Math.round(Math.random() * 18000 + 24000),
+        tenure_months: Math.floor(Math.random() * 24 + 12),
+        total_overdue_days: Math.floor(Math.random() * 28 + 8),
+        age: Math.floor(Math.random() * 15 + 30),
+        credit_score: Math.floor(Math.random() * 160 + 520),
+        num_loans: Math.floor(Math.random() * 3 + 2),
+        employment_years: Number((Math.random() * 5 + 3).toFixed(1)),
+        num_past_delinquencies: Math.floor(Math.random() * 3 + 1),
+        has_bankruptcy: 0,
+        dti_ratio: Number((Math.random() * 0.2 + 0.38).toFixed(2)),
+        payment_to_income_ratio: Number((Math.random() * 0.18 + 0.28).toFixed(2)),
+        loan_rate: Number((Math.random() * 8 + 18).toFixed(1)),
+        num_credit_contracts: Math.floor(Math.random() * 3 + 2),
+        num_closed_loans: Math.floor(Math.random() * 3 + 1),
+        max_overdue_days: Math.floor(Math.random() * 18 + 12),
+        requested_amount: Math.round(Math.random() * 220000 + 180000),
+        approved_amount: Math.round(Math.random() * 180000 + 150000),
+        children_count: Math.floor(Math.random() * 2 + 1),
+        living_area_sqm: Math.round(Math.random() * 35 + 48),
+        work_experience_total_years: Math.floor(Math.random() * 8 + 5),
+        has_higher_education: Math.random() > 0.5 ? 1 : 0,
+        is_salary_client: Math.random() > 0.45 ? 1 : 0,
+        has_credit_card: 1,
+        uses_mobile_banking: 1,
+        marital_status: getRandomItem(['женат', 'холост']),
+        income_source: 'зарплата',
+        employment_type: getRandomItem(['частный сектор', 'госслужащий']),
+        position_level: getRandomItem(['специалист', 'руководитель']),
+        loan_purpose: getRandomItem(['ремонт', 'авто']),
+        client_segment: getRandomItem(['массовый', 'масс-премиум']),
+      },
+    };
+  }
+
+  return {
+    scenario,
+    data: {
+      monthly_payment: Math.round(Math.random() * 10000 + 10000),
+      monthly_income: Math.round(Math.random() * 55000 + 78000),
+      total_expenses: Math.round(Math.random() * 22000 + 36000),
+      tenure_months: Math.floor(Math.random() * 30 + 24),
+      total_overdue_days: Math.floor(Math.random() * 5),
+      age: Math.floor(Math.random() * 18 + 28),
+      credit_score: Math.floor(Math.random() * 120 + 720),
+      num_loans: Math.floor(Math.random() * 2 + 1),
+      employment_years: Number((Math.random() * 10 + 5).toFixed(1)),
+      num_past_delinquencies: 0,
+      has_bankruptcy: 0,
+      dti_ratio: Number((Math.random() * 0.18 + 0.12).toFixed(2)),
+      payment_to_income_ratio: Number((Math.random() * 0.12 + 0.1).toFixed(2)),
+      loan_rate: Number((Math.random() * 7 + 11).toFixed(1)),
+      num_credit_contracts: Math.floor(Math.random() * 2 + 1),
+      num_closed_loans: Math.floor(Math.random() * 3 + 3),
+      max_overdue_days: Math.floor(Math.random() * 4),
+      requested_amount: Math.round(Math.random() * 160000 + 90000),
+      approved_amount: Math.round(Math.random() * 140000 + 90000),
+      children_count: Math.floor(Math.random() * 2),
+      living_area_sqm: Math.round(Math.random() * 40 + 68),
+      work_experience_total_years: Math.floor(Math.random() * 10 + 8),
+      has_higher_education: 1,
+      is_salary_client: 1,
+      has_credit_card: 1,
+      uses_mobile_banking: 1,
+      marital_status: 'женат',
+      income_source: 'зарплата',
+      employment_type: getRandomItem(['госслужащий', 'частный сектор']),
+      position_level: getRandomItem(['руководитель', 'топ-менеджер']),
+      loan_purpose: getRandomItem(['авто', 'обучение']),
+      client_segment: getRandomItem(['масс-премиум', 'премиум']),
+    },
+  };
+}
 
 function App() {
   const [activeTab, setActiveTab] = useState('main');
-  const [showKotAssistant, setShowKotAssistant] = useState(false);
+  const [showAssistant, setShowAssistant] = useState(true);
   const [generatedClient, setGeneratedClient] = useState(null);
   const [riskAnalysis, setRiskAnalysis] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [kotMessages, setKotMessages] = useState([
+  const [messages, setMessages] = useState([
     {
       type: 'bot',
-      avatar: '🐱',
-      content: 'Мяу! 👋 Я СберКот - ваш AI-помощник по оценке кредитных рисков. Нажмите кнопку ниже, чтобы сгенерировать тестового клиента и получить анализ.'
-    }
+      content:
+        'Я собрал для вас витрину риска клиента: могу сгенерировать профиль, отправить его в модель и сразу предложить сценарий помощи.',
+    },
   ]);
 
-  // API URL (можно вынести в .env)
-  const API_URL = 'http://localhost:8000';
-
-  // Функция генерации случайного клиента
-  const generateRandomClient = () => {
-    const scenarios = ['forgot', 'worried', 'bankruptcy'];
-    const scenario = scenarios[Math.floor(Math.random() * scenarios.length)];
-
-    let clientData;
-
-    switch(scenario) {
-      case 'bankruptcy':
-        clientData = {
-          monthly_payment: Math.round(Math.random() * 30000 + 25000),
-          monthly_income: Math.round(Math.random() * 15000 + 15000),
-          total_expenses: Math.round(Math.random() * 10000 + 12000),
-          tenure_months: Math.floor(Math.random() * 12 + 3),
-          total_overdue_days: Math.floor(Math.random() * 60 + 60),
-          age: Math.floor(Math.random() * 20 + 35),
-          credit_score: Math.floor(Math.random() * 200 + 300),
-          num_loans: Math.floor(Math.random() * 5 + 3),
-          employment_years: Math.random() * 3 + 1,
-          num_past_delinquencies: Math.floor(Math.random() * 6 + 3),
-          has_bankruptcy: 1,
-          dti_ratio: Math.random() * 0.4 + 0.6,
-          payment_to_income_ratio: Math.random() * 0.4 + 0.5,
-          loan_rate: Math.random() * 10 + 25,
-          num_credit_contracts: Math.floor(Math.random() * 4 + 4),
-          num_closed_loans: Math.floor(Math.random() * 2),
-          max_overdue_days: Math.floor(Math.random() * 60 + 60),
-          requested_amount: Math.round(Math.random() * 300000 + 300000),
-          approved_amount: Math.round(Math.random() * 200000 + 250000),
-          children_count: Math.floor(Math.random() * 3 + 1),
-          living_area_sqm: Math.round(Math.random() * 30 + 30),
-          work_experience_total_years: Math.floor(Math.random() * 5 + 3),
-          has_higher_education: Math.random() > 0.7 ? 1 : 0,
-          is_salary_client: 0,
-          has_credit_card: 1,
-          uses_mobile_banking: 1,
-          marital_status: ['разведен', 'холост'][Math.floor(Math.random() * 2)],
-          income_source: ['самозанятый', 'бизнес'][Math.floor(Math.random() * 2)],
-          employment_type: ['самозанятый', 'ИП'][Math.floor(Math.random() * 2)],
-          position_level: 'специалист',
-          loan_purpose: ['неотложные нужды', 'ремонт'][Math.floor(Math.random() * 2)],
-          client_segment: 'массовый'
-        };
-        break;
-
-      case 'worried':
-        clientData = {
-          monthly_payment: Math.round(Math.random() * 15000 + 15000),
-          monthly_income: Math.round(Math.random() * 20000 + 40000),
-          total_expenses: Math.round(Math.random() * 15000 + 25000),
-          tenure_months: Math.floor(Math.random() * 24 + 12),
-          total_overdue_days: Math.floor(Math.random() * 30 + 10),
-          age: Math.floor(Math.random() * 15 + 30),
-          credit_score: Math.floor(Math.random() * 150 + 500),
-          num_loans: Math.floor(Math.random() * 3 + 2),
-          employment_years: Math.random() * 5 + 3,
-          num_past_delinquencies: Math.floor(Math.random() * 3 + 1),
-          has_bankruptcy: 0,
-          dti_ratio: Math.random() * 0.3 + 0.4,
-          payment_to_income_ratio: Math.random() * 0.2 + 0.3,
-          loan_rate: Math.random() * 10 + 18,
-          num_credit_contracts: Math.floor(Math.random() * 3 + 2),
-          num_closed_loans: Math.floor(Math.random() * 3 + 1),
-          max_overdue_days: Math.floor(Math.random() * 20 + 15),
-          requested_amount: Math.round(Math.random() * 200000 + 200000),
-          approved_amount: Math.round(Math.random() * 150000 + 180000),
-          children_count: Math.floor(Math.random() * 2 + 1),
-          living_area_sqm: Math.round(Math.random() * 40 + 50),
-          work_experience_total_years: Math.floor(Math.random() * 8 + 5),
-          has_higher_education: Math.random() > 0.5 ? 1 : 0,
-          is_salary_client: Math.random() > 0.5 ? 1 : 0,
-          has_credit_card: 1,
-          uses_mobile_banking: 1,
-          marital_status: ['женат', 'холост'][Math.floor(Math.random() * 2)],
-          income_source: 'зарплата',
-          employment_type: ['частный сектор', 'госслужащий'][Math.floor(Math.random() * 2)],
-          position_level: ['специалист', 'руководитель'][Math.floor(Math.random() * 2)],
-          loan_purpose: ['ремонт', 'авто'][Math.floor(Math.random() * 2)],
-          client_segment: ['массовый', 'масс-премиум'][Math.floor(Math.random() * 2)]
-        };
-        break;
-
-      default: // forgot
-        clientData = {
-          monthly_payment: Math.round(Math.random() * 10000 + 10000),
-          monthly_income: Math.round(Math.random() * 50000 + 80000),
-          total_expenses: Math.round(Math.random() * 20000 + 40000),
-          tenure_months: Math.floor(Math.random() * 36 + 24),
-          total_overdue_days: Math.floor(Math.random() * 5),
-          age: Math.floor(Math.random() * 20 + 28),
-          credit_score: Math.floor(Math.random() * 150 + 700),
-          num_loans: Math.floor(Math.random() * 2 + 1),
-          employment_years: Math.random() * 10 + 5,
-          num_past_delinquencies: 0,
-          has_bankruptcy: 0,
-          dti_ratio: Math.random() * 0.2 + 0.15,
-          payment_to_income_ratio: Math.random() * 0.15 + 0.1,
-          loan_rate: Math.random() * 8 + 12,
-          num_credit_contracts: Math.floor(Math.random() * 2 + 1),
-          num_closed_loans: Math.floor(Math.random() * 3 + 3),
-          max_overdue_days: Math.floor(Math.random() * 5),
-          requested_amount: Math.round(Math.random() * 150000 + 100000),
-          approved_amount: Math.round(Math.random() * 150000 + 100000),
-          children_count: Math.floor(Math.random() * 2),
-          living_area_sqm: Math.round(Math.random() * 50 + 70),
-          work_experience_total_years: Math.floor(Math.random() * 10 + 8),
-          has_higher_education: 1,
-          is_salary_client: 1,
-          has_credit_card: 1,
-          uses_mobile_banking: 1,
-          marital_status: 'женат',
-          income_source: 'зарплата',
-          employment_type: ['госслужащий', 'частный сектор'][Math.floor(Math.random() * 2)],
-          position_level: ['руководитель', 'топ-менеджер'][Math.floor(Math.random() * 2)],
-          loan_purpose: ['авто', 'обучение'][Math.floor(Math.random() * 2)],
-          client_segment: ['масс-премиум', 'премиум'][Math.floor(Math.random() * 2)]
-        };
+  const assistantRecommendations = useMemo(() => {
+    if (!riskAnalysis?.risk_level) {
+      return [
+        'Сгенерируйте клиента, чтобы показать demo-сценарий работы модели.',
+        'После анализа интерфейс подскажет, как действовать с этим клиентом.',
+        'Если API временно недоступен, UI аккуратно покажет ошибку вместо поломанного состояния.',
+      ];
     }
 
-    return { data: clientData, scenario };
+    return assistantPrompts[riskAnalysis.risk_level] ?? [];
+  }, [riskAnalysis]);
+
+  const profileTheme = useMemo(() => {
+    const scenario = riskAnalysis?.risk_level ?? generatedClient?.scenario ?? 'forgot';
+    return scenarioThemes[scenario];
+  }, [generatedClient, riskAnalysis]);
+
+  const appendMessage = (content) => {
+    setMessages((prev) => [...prev, { type: 'bot', content }]);
   };
 
-  // Обработчик генерации клиента
   const handleGenerateClient = () => {
-    const { data, scenario } = generateRandomClient();
-    setGeneratedClient(data);
+    const nextClient = generateRandomClient();
+    setGeneratedClient(nextClient);
     setRiskAnalysis(null);
-
-    // Добавляем сообщение в чат
-    const scenarioNames = {
-      'bankruptcy': '🔴 ВЫСОКИЙ РИСК',
-      'worried': '🟡 СРЕДНИЙ РИСК',
-      'forgot': '🟢 НИЗКИЙ РИСК'
-    };
-
-    setKotMessages(prev => [...prev, {
-      type: 'bot',
-      avatar: '🐱',
-      content: `Сгенерирован новый клиент (${scenarioNames[scenario]})`
-    }]);
-
-    setShowKotAssistant(true);
+    setShowAssistant(true);
+    appendMessage(
+      `Сформирован тестовый профиль: ${scenarioLabels[nextClient.scenario]}. Можно отправлять в модель и разбирать меры поддержки клиента.`
+    );
   };
 
-  // Обработчик анализа риска
   const handleAnalyzeRisk = async () => {
-    if (!generatedClient) return;
+    if (!generatedClient) {
+      appendMessage('Сначала нужен профиль клиента. Сгенерируйте его, и я отправлю данные в модель.');
+      return;
+    }
 
     setIsLoading(true);
-    setKotMessages(prev => [...prev, {
-      type: 'bot',
-      avatar: '🐱',
-      content: '🔍 Анализирую профиль клиента...'
-    }]);
+    appendMessage('Отправляю профиль в модель риска и собираю интерпретацию результата.');
 
     try {
       const response = await fetch(`${API_URL}/predict`, {
@@ -179,415 +270,300 @@ function App() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(generatedClient)
+        body: JSON.stringify(generatedClient.data),
       });
 
+      const payload = await response.json().catch(() => null);
+
       if (!response.ok) {
-        throw new Error('Ошибка при анализе');
+        const detail = payload?.detail || 'Сервер вернул ошибку при анализе профиля.';
+        throw new Error(detail);
       }
 
-      const result = await response.json();
-      setRiskAnalysis(result);
-
-      // Добавляем результат в чат
-      const riskEmoji = {
-        'forgot': '🟢',
-        'worried': '🟡',
-        'bankruptcy': '🔴'
-      };
-
-      const riskNames = {
-        'forgot': 'НИЗКИЙ РИСК (забыл)',
-        'worried': 'СРЕДНИЙ РИСК (волнуется)',
-        'bankruptcy': 'ВЫСОКИЙ РИСК (банкротство)'
-      };
-
-      setKotMessages(prev => [...prev, {
-        type: 'bot',
-        avatar: '🐱',
-        content: `${riskEmoji[result.risk_level]} Результат анализа: ${riskNames[result.risk_level]}\n\n${result.risk_description}\n\nУверенность: ${(result.confidence * 100).toFixed(1)}%`
-      }]);
-
+      setRiskAnalysis(payload);
+      appendMessage(
+        `Модель вернула уровень "${scenarioLabels[payload.risk_level] ?? payload.risk_level}". Уверенность: ${(
+          payload.confidence * 100
+        ).toFixed(1)}%. ${payload.risk_description}`
+      );
     } catch (error) {
-      console.error('Ошибка:', error);
-      setKotMessages(prev => [...prev, {
-        type: 'bot',
-        avatar: '🐱',
-        content: '❌ Ошибка при анализе. Проверьте, запущен ли сервер.'
-      }]);
+      appendMessage(
+        `Не удалось получить ответ от API. ${error.message}. Проверьте backend на ${API_URL} и повторите запрос.`
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Форматирование значений для отображения
-  const formatMoney = (value) => {
-    return new Intl.NumberFormat('ru-RU', {
-      style: 'currency',
-      currency: 'RUB',
-      maximumFractionDigits: 0
-    }).format(value);
-  };
-
-  const formatPercent = (value) => {
-    return `${(value * 100).toFixed(1)}%`;
-  };
+  const riskLevel = riskAnalysis?.risk_level ?? generatedClient?.scenario;
 
   return (
-    <div className="app">
-      {/* Header */}
-      <header className="header">
-        <div className="header-top">
-          <div className="logo">
-            <span className="logo-icon">🏦</span>
-            <span className="logo-text">СБЕРБАНК</span>
-          </div>
-          <div className="header-actions">
-            <button
-              className={`icon-btn ${showKotAssistant ? 'active' : ''}`}
-              onClick={() => setShowKotAssistant(!showKotAssistant)}
-              title="СберКот - анализ рисков"
-            >
-              🐱
-            </button>
-            <button className="icon-btn">🔔</button>
-            <button className="icon-btn">👤</button>
-          </div>
-        </div>
-        <div className="header-tabs">
-          <button className={`tab ${activeTab === 'main' ? 'active' : ''}`}>Главный</button>
-          <button className={`tab ${activeTab === 'savings' ? 'active' : ''}`}>Накопления</button>
-          <button className={`tab ${activeTab === 'payments' ? 'active' : ''}`}>Платежи</button>
-          <button className={`tab ${activeTab === 'credits' ? 'active' : ''}`}>Кредиты</button>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <div className="main-content">
-        <div className="container">
-          {/* СберКот Assistant */}
-          {showKotAssistant && (
-            <div className="kot-assistant">
-              <div className="kot-header">
-                <div className="kot-title">
-                  <span className="kot-icon">🐱</span>
-                  <h3>СберКот • Анализ рисков</h3>
+    <div className="app-shell">
+      <div className="app">
+        <header className="header">
+          <div className="topbar">
+            <div>
+              <div className="brand-row">
+                <div className="brand-mark" aria-hidden="true">
+                  <span className="brand-core" />
                 </div>
-                <button
-                  className="kot-close"
-                  onClick={() => setShowKotAssistant(false)}
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="kot-chat">
-                {kotMessages.slice(-5).map((msg, idx) => (
-                  <div key={idx} className={`kot-message kot-message-${msg.type}`}>
-                    <div className="kot-message-avatar">{msg.avatar}</div>
-                    <div className="kot-message-content">
-                      {msg.content.split('\n').map((line, i) => (
-                        <p key={i}>{line}</p>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="kot-actions">
-                <button
-                  className="kot-btn kot-btn-generate"
-                  onClick={handleGenerateClient}
-                >
-                  <span>🎲</span>
-                  Сгенерировать клиента
-                </button>
-                <button
-                  className="kot-btn kot-btn-analyze"
-                  onClick={handleAnalyzeRisk}
-                  disabled={!generatedClient || isLoading}
-                >
-                  <span>{isLoading ? '⏳' : '🔮'}</span>
-                  {isLoading ? 'Анализ...' : 'Анализировать'}
-                </button>
-              </div>
-
-              {generatedClient && (
-                <div className="kot-client-card">
-                  <div className="kot-client-header">
-                    <h4>📋 Профиль клиента</h4>
-                    {riskAnalysis && (
-                      <span className={`kot-risk-badge kot-risk-${riskAnalysis.risk_level}`}>
-                        {riskAnalysis.risk_level === 'forgot' && '🟢 Низкий риск'}
-                        {riskAnalysis.risk_level === 'worried' && '🟡 Средний риск'}
-                        {riskAnalysis.risk_level === 'bankruptcy' && '🔴 Высокий риск'}
-                      </span>
-                    )}
-                  </div>
-                  <div className="kot-client-details">
-                    <div className="kot-detail-row">
-                      <span className="kot-detail-label">Доход:</span>
-                      <span className="kot-detail-value">{formatMoney(generatedClient.monthly_income)}</span>
-                    </div>
-                    <div className="kot-detail-row">
-                      <span className="kot-detail-label">Платеж:</span>
-                      <span className="kot-detail-value">{formatMoney(generatedClient.monthly_payment)}</span>
-                    </div>
-                    <div className="kot-detail-row">
-                      <span className="kot-detail-label">Просрочка:</span>
-                      <span className={`kot-detail-value ${generatedClient.total_overdue_days > 30 ? 'risk-high' : generatedClient.total_overdue_days > 10 ? 'risk-medium' : 'risk-low'}`}>
-                        {generatedClient.total_overdue_days} дней
-                      </span>
-                    </div>
-                    <div className="kot-detail-row">
-                      <span className="kot-detail-label">DTI:</span>
-                      <span className="kot-detail-value">{formatPercent(generatedClient.dti_ratio)}</span>
-                    </div>
-                    <div className="kot-detail-row">
-                      <span className="kot-detail-label">Ставка:</span>
-                      <span className="kot-detail-value">{generatedClient.loan_rate.toFixed(1)}%</span>
-                    </div>
-                    <div className="kot-detail-row">
-                      <span className="kot-detail-label">Банкротство:</span>
-                      <span className={`kot-detail-value ${generatedClient.has_bankruptcy ? 'risk-high' : ''}`}>
-                        {generatedClient.has_bankruptcy ? 'ДА' : 'НЕТ'}
-                      </span>
-                    </div>
-                  </div>
+                <div>
+                  <p className="brand-eyebrow">Сбер ID</p>
+                  <h1 className="brand-title">Иван, добрый вечер</h1>
                 </div>
-              )}
+              </div>
+              <p className="brand-subtitle">
+                Банк, ассистент и скоринг риска в одном клиентском интерфейсе
+              </p>
             </div>
+
+            <div className="header-actions">
+              <button
+                className={`icon-btn ${showAssistant ? 'active' : ''}`}
+                type="button"
+                onClick={() => setShowAssistant((prev) => !prev)}
+                aria-label="Переключить ассистента"
+              >
+                AI
+              </button>
+              <button className="icon-btn" type="button" aria-label="Уведомления">
+                ⌁
+              </button>
+              <button className="icon-btn" type="button" aria-label="Профиль">
+                И
+              </button>
+            </div>
+          </div>
+
+          <nav className="header-tabs" aria-label="Разделы">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                className={`tab ${activeTab === tab.id ? 'active' : ''}`}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </nav>
+        </header>
+
+        <main className="main-content">
+          <section className="hero-card">
+            <div className="hero-copy">
+              <span className="hero-label">Платёжный календарь</span>
+              <h2>Минимальный платёж до 30 апреля</h2>
+              <p>
+                Интерфейс сразу поднимает риск-сигнал и предлагает перейти к сценарию
+                удержания клиента через AI-помощника.
+              </p>
+            </div>
+            <div className="hero-stats">
+              <div>
+                <span className="stat-label">Сумма платежа</span>
+                <strong>{formatMoney(199999.69)}</strong>
+              </div>
+              <div>
+                <span className="stat-label">Вероятность риска</span>
+                <strong>{riskAnalysis ? formatPercent(riskAnalysis.confidence) : 'н/д'}</strong>
+              </div>
+            </div>
+            <div className="hero-actions">
+              <button type="button" className="primary-btn" onClick={() => setShowAssistant(true)}>
+                Открыть ассистента
+              </button>
+              <button type="button" className="secondary-btn" onClick={handleGenerateClient}>
+                Новый клиент
+              </button>
+            </div>
+          </section>
+
+          {showAssistant && (
+            <section className={`assistant-panel ${profileTheme.tone}`}>
+              <div className="assistant-heading">
+                <div>
+                  <span className="assistant-label">Sber Risk Assistant</span>
+                  <h3>{profileTheme.title}</h3>
+                  <p>{profileTheme.subtitle}</p>
+                </div>
+                {riskLevel && (
+                  <span className={`risk-pill risk-pill-${riskLevel}`}>
+                    {scenarioLabels[riskLevel]}
+                  </span>
+                )}
+              </div>
+
+              <div className="assistant-grid">
+                <div className="assistant-chat">
+                  {messages.slice(-4).map((message, index) => (
+                    <article key={`${message.content}-${index}`} className="assistant-message">
+                      <div className="assistant-avatar">AI</div>
+                      <div className="assistant-bubble">
+                        <p>{message.content}</p>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+
+                <div className="assistant-actions">
+                  <button type="button" className="primary-btn" onClick={handleGenerateClient}>
+                    Сгенерировать профиль
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-btn accent"
+                    onClick={handleAnalyzeRisk}
+                    disabled={!generatedClient || isLoading}
+                  >
+                    {isLoading ? 'Анализируем...' : 'Запустить скоринг'}
+                  </button>
+                  <p className="assistant-note">
+                    API: <span>{API_URL}</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="insights-grid">
+                <article className="insight-card">
+                  <span className="insight-label">Профиль клиента</span>
+                  {generatedClient ? (
+                    <dl className="detail-list">
+                      <div>
+                        <dt>Доход</dt>
+                        <dd>{formatMoney(generatedClient.data.monthly_income)}</dd>
+                      </div>
+                      <div>
+                        <dt>Платёж</dt>
+                        <dd>{formatMoney(generatedClient.data.monthly_payment)}</dd>
+                      </div>
+                      <div>
+                        <dt>DTI</dt>
+                        <dd>{formatPercent(generatedClient.data.dti_ratio)}</dd>
+                      </div>
+                      <div>
+                        <dt>Просрочка</dt>
+                        <dd>{generatedClient.data.total_overdue_days} дней</dd>
+                      </div>
+                    </dl>
+                  ) : (
+                    <p className="empty-copy">Пока нет активного профиля. Сгенерируйте демо-клиента.</p>
+                  )}
+                </article>
+
+                <article className="insight-card">
+                  <span className="insight-label">Рекомендации ассистента</span>
+                  <div className="recommendation-list">
+                    {assistantRecommendations.map((item) => (
+                      <p key={item}>{item}</p>
+                    ))}
+                  </div>
+                </article>
+
+                <article className="insight-card">
+                  <span className="insight-label">Вердикт модели</span>
+                  {riskAnalysis ? (
+                    <div className="model-summary">
+                      <strong>{scenarioLabels[riskAnalysis.risk_level]}</strong>
+                      <p>{riskAnalysis.risk_description}</p>
+                      <span>Уверенность модели: {formatPercent(riskAnalysis.confidence)}</span>
+                    </div>
+                  ) : (
+                    <p className="empty-copy">
+                      После запуска скоринга здесь появится расшифровка результата от backend-модели.
+                    </p>
+                  )}
+                </article>
+              </div>
+            </section>
           )}
 
-          {/* Greeting and Search */}
-          <div className="greeting-section">
-            <h1>Здравствуйте, Иван!</h1>
-            <div className="search-box">
-              <span className="search-icon">🔍</span>
-              <input type="text" placeholder="Поиск операций, платежей, переводов" />
-            </div>
-          </div>
-
-          {/* Wallet Section */}
-          <div className="wallet-section">
-            <div className="section-header">
-              <h2>Кошелёк</h2>
-              <button className="link-btn">Все счета →</button>
-            </div>
-
-            {/* Main Balance Card */}
-            <div className="main-balance-card">
-              <div className="balance-header">
-                <span className="balance-label">Внесите до 30.04</span>
-                <span className="info-icon">ⓘ</span>
+          <section className="section-card">
+            <div className="section-heading">
+              <div>
+                <span className="section-label">Финансы</span>
+                <h3>Кошелёк и продукты</h3>
               </div>
-              <div className="balance-amount">199 999,69 ₽</div>
-              <div className="balance-footer-wrapper">
-                <div className="min-payment-info">
-                  <span className="balance-footer">Минимальный платёж</span>
-                  <span className="min-payment-hint">до 30.04.2024</span>
-                </div>
-                <button
-                  className="help-button help-button-attention"
-                  onClick={() => {
-                    setShowKotAssistant(true);
-                    setKotMessages(prev => [...prev,
-                      {
-                        type: 'bot',
-                        avatar: '🐱',
-                        content: '👋 Здравствуйте! Я СберКот. Вижу, у вас есть минимальный платеж. Могу помочь разобраться с кредитной нагрузкой или предложить реструктуризацию.'
-                      },
-                      {
-                        type: 'bot',
-                        avatar: '🐱',
-                        content: 'Нажмите "Сгенерировать клиента" для демонстрации анализа рисков или спросите меня о вашей ситуации.'
-                      }
-                    ]);
-                  }}
-                >
-                  <span className="help-icon">🐱</span>
-                  <span className="help-text">Спросить СберКота</span>
-                  <span className="help-badge">●</span>
+              <button type="button" className="ghost-link">
+                Все счета
+              </button>
+            </div>
+
+            <div className="product-list">
+              {products.map((product) => (
+                <article key={product.title} className={`product-card ${product.tone}`}>
+                  <div>
+                    <h4>{product.title}</h4>
+                    <p>{product.subtitle}</p>
+                  </div>
+                  <strong>{formatMoney(product.amount)}</strong>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="section-card compact">
+            <div className="section-heading">
+              <div>
+                <span className="section-label">Сценарии</span>
+                <h3>{tabs.find((tab) => tab.id === activeTab)?.label}</h3>
+              </div>
+            </div>
+
+            <div className="actions-grid">
+              {quickActions.map((action) => (
+                <button key={action.title} type="button" className="action-btn">
+                  <span className="action-icon">{action.icon}</span>
+                  <span>{action.title}</span>
                 </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="section-card">
+            <div className="section-heading">
+              <div>
+                <span className="section-label">Лента</span>
+                <h3>Последние операции</h3>
               </div>
+              <button type="button" className="ghost-link">
+                Вся история
+              </button>
             </div>
 
-            {/* Cards List */}
-            <div className="cards-list">
-              <div className="card-row">
-                <div className="card-info">
-                  <div className="card-icon">💳</div>
-                  <div className="card-details">
-                    <div className="card-name">Visa Classic</div>
-                    <div className="card-number">•• 1234</div>
+            <div className="transaction-list">
+              {transactions.map((transaction) => (
+                <article key={transaction.title} className="transaction-item">
+                  <div className="transaction-badge">{transaction.badge}</div>
+                  <div className="transaction-copy">
+                    <h4>{transaction.title}</h4>
+                    <p>{transaction.meta}</p>
                   </div>
-                </div>
-                <div className="card-balance">-200 000 ₽</div>
-              </div>
-
-              <div className="card-row">
-                <div className="card-info">
-                  <div className="card-icon">💳</div>
-                  <div className="card-details">
-                    <div className="card-name">Кредитная</div>
-                    <div className="card-number">•• 1234</div>
-                  </div>
-                </div>
-                <div className="card-balance">20 000,36 ₽</div>
-              </div>
-
-              <div className="card-row">
-                <div className="card-info">
-                  <div className="card-icon">💳</div>
-                  <div className="card-details">
-                    <div className="card-name">МИР Классическая</div>
-                    <div className="card-number">•• 1234</div>
-                  </div>
-                </div>
-                <div className="card-balance">1 925,76 ₽</div>
-              </div>
+                  <strong className={transaction.amount > 0 ? 'positive' : ''}>
+                    {transaction.amount > 0 ? '+' : ''}
+                    {formatMoney(transaction.amount)}
+                  </strong>
+                </article>
+              ))}
             </div>
+          </section>
+        </main>
 
-            {/* SberSpasibo */}
-            <div className="spasibo-card">
-              <div className="spasibo-info">
-                <span className="spasibo-icon">⭐</span>
-                <span className="spasibo-text">СберСпасибо</span>
-              </div>
-              <div className="spasibo-balance">194</div>
-            </div>
-          </div>
-
-          {/* Quick Actions */}
-          <div className="quick-actions">
-            <button className="action-btn">
-              <div className="action-icon">📲</div>
-              <span>Перевод</span>
-            </button>
-            <button className="action-btn">
-              <div className="action-icon">💳</div>
-              <span>Оплатить</span>
-            </button>
-            <button className="action-btn">
-              <div className="action-icon">📊</div>
-              <span>Аналитика</span>
-            </button>
-            <button className="action-btn">
-              <div className="action-icon">🏷️</div>
-              <span>Акции</span>
-            </button>
-          </div>
-
-          {/* Investment Banner */}
-          <div className="investment-banner">
-            <div className="banner-content">
-              <h3>Золотое будущее</h3>
-              <p>Инвестируйте в драгметаллы от 0.1 г., не выходя из дома</p>
-              <button className="banner-btn">Узнать</button>
-            </div>
-            <div className="banner-icon">💰</div>
-          </div>
-
-          {/* Recent Transactions */}
-          <div className="transactions-section">
-            <div className="section-header">
-              <h2>История</h2>
-              <button className="link-btn">Все →</button>
-            </div>
-
-            <div className="transactions-list">
-              <div className="transaction-item">
-                <div className="transaction-icon">🏢</div>
-                <div className="transaction-details">
-                  <div className="transaction-name">ООО "PROEKT" TOMSK RUS</div>
-                  <div className="transaction-meta">Сегодня • Оплата товаров и услуг</div>
-                </div>
-                <div className="transaction-amount">38 ₽</div>
-              </div>
-
-              <div className="transaction-item">
-                <div className="transaction-icon">🛒</div>
-                <div className="transaction-details">
-                  <div className="transaction-name">Монетка</div>
-                  <div className="transaction-meta">Сегодня • Оплата товаров и услуг</div>
-                </div>
-                <div className="transaction-amount">99,98 ₽</div>
-              </div>
-
-              <div className="transaction-item">
-                <div className="transaction-icon">🏢</div>
-                <div className="transaction-details">
-                  <div className="transaction-name">ООО PROEKT TOMSK RUS</div>
-                  <div className="transaction-meta">Сегодня • Оплата товаров и услуг</div>
-                </div>
-                <div className="transaction-amount">36 ₽</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Recent Transfers */}
-          <div className="transfers-section">
-            <div className="section-header">
-              <h2>Последние переводы</h2>
-              <button className="link-btn">Все →</button>
-            </div>
-
-            <div className="transfers-list">
-              <div className="transfer-item">
-                <div className="transfer-avatar">👩</div>
-                <div className="transfer-details">
-                  <div className="transfer-name">Лиза</div>
-                  <div className="transfer-meta">Подтверждён • Сегодня</div>
-                </div>
-                <div className="transfer-amount positive">+1 200 ₽</div>
-              </div>
-
-              <div className="transfer-item">
-                <div className="transfer-avatar">🐶</div>
-                <div className="transfer-details">
-                  <div className="transfer-name">Даша</div>
-                  <div className="transfer-meta">Зачислено • Вчера</div>
-                </div>
-                <div className="transfer-amount">850 ₽</div>
-              </div>
-
-              <div className="transfer-item">
-                <div className="transfer-avatar">И</div>
-                <div className="transfer-details">
-                  <div className="transfer-name">Ирина И.</div>
-                  <div className="transfer-meta">По номеру телефона</div>
-                </div>
-                <div className="transfer-amount">2 500 ₽</div>
-              </div>
-            </div>
-          </div>
-
-        </div>
+        <nav className="bottom-nav" aria-label="Нижняя навигация">
+          <button type="button" className="nav-item active">
+            <span>Главная</span>
+          </button>
+          <button type="button" className="nav-item">
+            <span>Платежи</span>
+          </button>
+          <button type="button" className="nav-item">
+            <span>История</span>
+          </button>
+          <button type="button" className="nav-item">
+            <span>Профиль</span>
+          </button>
+        </nav>
       </div>
-
-      {/* Bottom Navigation */}
-      <nav className="bottom-nav">
-        <button className="nav-item active">
-          <span>🏠</span>
-          <span>Главный</span>
-        </button>
-        <button className="nav-item">
-          <span>📊</span>
-          <span>История</span>
-        </button>
-        <button className="nav-item">
-          <span>💳</span>
-          <span>Платежи</span>
-        </button>
-        <button className="nav-item">
-          <span>👤</span>
-          <span>Профиль</span>
-        </button>
-        <button className="nav-item">
-          <span>☰</span>
-          <span>Ещё</span>
-        </button>
-      </nav>
     </div>
   );
 }

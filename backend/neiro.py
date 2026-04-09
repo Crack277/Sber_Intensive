@@ -1,46 +1,39 @@
-import pandas as pd
-import numpy as np
+from pathlib import Path
+
 import joblib
-import os
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+import pandas as pd
+
+BASE_DIR = Path(__file__).resolve().parent
+MODEL_PATH = BASE_DIR / 'risk_model.pkl'
 
 
 class RiskPredictor:
-    def __init__(self, model_path='risk_model.pkl'):
+    def __init__(self, model_path: Path = MODEL_PATH):
         self.model = None
         self.scaler = None
         self.label_encoder = None
         self.feature_columns = None
-        self.model_path = model_path
+        self.model_path = Path(model_path)
 
-        # Загружаем уже обученную модель
-        if os.path.exists(model_path):
-            self.load_model(model_path)
+        if self.model_path.exists():
+            self.load_model(self.model_path)
         else:
-            print("❌ Модель не найдена! Запустите обучение сначала.")
-            raise FileNotFoundError(f"Модель {model_path} не найдена")
+            raise FileNotFoundError(f'Модель не найдена: {self.model_path}')
 
-    def load_model(self, path):
-        """Загружает модель"""
+    def load_model(self, path: Path):
         data = joblib.load(path)
         self.model = data['model']
         self.scaler = data['scaler']
         self.label_encoder = data['label_encoder']
         self.feature_columns = data['feature_columns']
-        print(f"✅ Модель загружена из {path}")
-        print(f"📊 Доступные классы: {list(self.label_encoder.classes_)}")
 
     def predict(self, client_data):
-        """Предсказывает риск для клиента"""
-        # Создаем DataFrame
         client_df = pd.DataFrame([client_data])
 
-        # Добавляем недостающие колонки
         for col in self.feature_columns:
             if col not in client_df.columns:
                 client_df[col] = 0
 
-        # Создаем дополнительные признаки
         monthly_payment = client_data.get('monthly_payment', 0)
         monthly_income = client_data.get('monthly_income', 1)
         total_expenses = client_data.get('total_expenses', 1)
@@ -51,40 +44,20 @@ class RiskPredictor:
         client_df['overdue_ratio'] = total_overdue_days / (tenure_months + 1)
         client_df['payment_burden'] = monthly_payment / (total_expenses + 1)
 
-        # Выбираем нужные колонки
-        X = client_df[self.feature_columns].fillna(0)
+        features = client_df[self.feature_columns].fillna(0)
+        scaled_features = self.scaler.transform(features)
 
-        # Нормализуем
-        X_scaled = self.scaler.transform(X)
-
-        # Предсказываем
-        pred = self.model.predict(X_scaled)[0]
-        proba = self.model.predict_proba(X_scaled)[0]
-
-        risk_label = self.label_encoder.inverse_transform([pred])[0]
-
-        # Получаем вероятность
+        prediction = self.model.predict(scaled_features)[0]
+        probabilities = self.model.predict_proba(scaled_features)[0]
+        risk_label = self.label_encoder.inverse_transform([prediction])[0]
         class_idx = list(self.label_encoder.classes_).index(risk_label)
-        confidence = proba[class_idx]
+        confidence = probabilities[class_idx]
 
         return risk_label, confidence
 
 
-# Создаем глобальный экземпляр (загружается 1 раз при импорте)
-print("🔄 Загрузка модели предсказания риска...")
-_predictor = RiskPredictor('risk_model.pkl')
+_predictor = RiskPredictor()
 
 
-def predict_client_risk(client_data: dict) -> tuple:
-    """
-    Предсказывает риск для клиента
-
-    Parameters:
-    client_data: dict с данными клиента
-
-    Returns:
-    tuple: (risk_label, confidence)
-    risk_label: 'forgot', 'worried', или 'bankruptcy'
-    confidence: float от 0 до 1
-    """
+def predict_client_risk(client_data: dict) -> tuple[str, float]:
     return _predictor.predict(client_data)
