@@ -47,16 +47,60 @@ const scenarioThemes = {
   },
 };
 
+const DEBT_PAYMENT_LINK = '#debt-payment';
+const SOLUTIONS_LINK = '#solutions';
+
+const chatOptionSets = {
+  root: [
+    { id: 'forgot', label: 'Забыл' },
+    { id: 'illness', label: 'Заболел' },
+    { id: 'money', label: 'Нехватка денег' },
+    { id: 'bankruptcy', label: 'Начал процедуру банкротства' },
+    { id: 'other', label: 'Другое' },
+  ],
+  illness: [
+    { id: 'short_term', label: 'Краткосрочная' },
+    { id: 'long_term', label: 'Долгосрочная' },
+    { id: 'unclear', label: 'Пока не понимаю' },
+  ],
+  money: [
+    { id: 'pause', label: 'Взять паузу' },
+    { id: 'review', label: 'Пересмотреть условия' },
+    { id: 'service_swap', label: 'Обмен долга на услуги' },
+  ],
+  unclear: [
+    { id: 'pause', label: 'Взять паузу' },
+    { id: 'specialist', label: 'Связаться со специалистом' },
+  ],
+  medical_offer: [
+    { id: 'thumbs_up', label: 'Палец вверх' },
+    { id: 'thumbs_down', label: 'Палец вниз' },
+  ],
+};
+
+function createChatMessage(type, content, extra = {}) {
+  return {
+    type,
+    content,
+    ...extra,
+  };
+}
+
+function getInitialChatMessages(clientName) {
+  return [
+    createChatMessage(
+      'bot',
+      `Здравствуйте${clientName ? `, ${clientName}` : ''}! Хочу понять ситуацию, чтобы предложить решение. Может, укажите, что у Вас произошло?`
+    ),
+  ];
+}
+
 function formatMoney(value) {
   return new Intl.NumberFormat('ru-RU', {
     style: 'currency',
     currency: 'RUB',
     maximumFractionDigits: 0,
   }).format(value);
-}
-
-function formatPercent(value) {
-  return `${(value * 100).toFixed(1)}%`;
 }
 
 function App() {
@@ -66,8 +110,9 @@ function App() {
   const [clientProfile, setClientProfile] = useState(null);
   const [riskAnalysis, setRiskAnalysis] = useState(null);
   const [retentionMessages, setRetentionMessages] = useState([]);
+  const [chatOptions, setChatOptions] = useState([]);
   const [retentionInput, setRetentionInput] = useState('');
-  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+  const [, setIsLoadingProfile] = useState(false);
   const [isRetentionLoading, setIsRetentionLoading] = useState(false);
 
   const profileTheme = useMemo(() => {
@@ -75,7 +120,15 @@ function App() {
     return scenarioThemes[scenario];
   }, [riskAnalysis]);
 
+  const resetRetentionChat = () => {
+    setRetentionMessages(getInitialChatMessages(clientProfile?.full_name));
+    setChatOptions(chatOptionSets.root);
+    setRetentionInput('');
+    setIsRetentionLoading(false);
+  };
+
   const openBotDialog = () => {
+    resetRetentionChat();
     setIsBotDialogOpen(true);
   };
 
@@ -97,15 +150,9 @@ function App() {
       setClientProfile(payload);
       setRiskAnalysis(payload.risk);
       setRetentionMessages(
-        payload.retention_dialog_enabled
-          ? [
-              {
-                type: 'bot',
-                content: payload.retention_summary,
-              },
-            ]
-          : []
+        getInitialChatMessages(payload.full_name)
       );
+      setChatOptions(chatOptionSets.root);
       setRetentionInput('');
       setShowAssistant(true);
       setIsBotDialogOpen(false);
@@ -120,53 +167,120 @@ function App() {
     loadClientProfile();
   }, []);
 
-  const handleRetentionSubmit = async (prefilledMessage) => {
+  const applyChatBranch = (branchId) => {
+    switch (branchId) {
+      case 'forgot':
+        return {
+          messages: [
+            createChatMessage('bot', 'Вы можете внести свой платёж, перейдя по ссылке сверху.'),
+          ],
+          options: [],
+        };
+      case 'illness':
+        return {
+          messages: [createChatMessage('bot', 'Ситуация, скорее:')],
+          options: chatOptionSets.illness,
+        };
+      case 'money':
+        return {
+          messages: [
+            createChatMessage(
+              'bot',
+              'Действительно, так бывает. Ситуация не из приятных, но мы можем помочь и предложить следующие варианты:'
+            ),
+          ],
+          options: chatOptionSets.money,
+        };
+      case 'bankruptcy':
+        return {
+          messages: [
+            createChatMessage('warning', '', {
+              title: 'ВНИМАНИЕ!',
+              paragraphs: [
+                'Банкротство - это не лёгкий путь, а разрушительный шаг. Вы можете потерять имущество, лишиться кредитов и навредить своей репутации, получив "чёрную метку".',
+                'Сам процесс очень долгий, эмоционально выматывающий и не гарантирует полного избавления от долгов.',
+                'Лучшее решение - остаться с нами.',
+              ],
+              link: {
+                href: SOLUTIONS_LINK,
+                label: 'Здесь представлены варианты решения Вашей проблемы.',
+              },
+              footer:
+                'Это поможет сохранить Ваше имущество и восстановить финансовое положение.',
+            }),
+          ],
+          options: [],
+        };
+      case 'other':
+        return {
+          messages: [createChatMessage('bot', 'В ближайшее время специалист с Вами свяжется!')],
+          options: [],
+        };
+      case 'unclear':
+        return {
+          messages: [createChatMessage('bot', 'Давайте выберем безопасный следующий шаг:')],
+          options: chatOptionSets.unclear,
+        };
+      case 'long_term':
+        return applyChatBranch('money');
+      case 'short_term':
+        return {
+          messages: [
+            createChatMessage(
+              'bot',
+              'Увы, так бывает. Специально для Вашей проблемы у нас есть выгодное предложение: дополнительная скидка на медицинские услуги и лекарственные препараты. Также, на период лечения, мы можем пересмотреть условия по Вашей задолженности. Как Вам наше предложение?'
+            ),
+          ],
+          options: chatOptionSets.medical_offer,
+        };
+      case 'pause':
+      case 'review':
+      case 'service_swap':
+      case 'specialist':
+      case 'thumbs_up':
+        return {
+          messages: [createChatMessage('bot', 'В ближайшее время специалист с Вами свяжется!')],
+          options: [],
+        };
+      case 'thumbs_down':
+        return {
+          messages: [
+            createChatMessage('bot', 'У нас есть ещё предложения для Вас. Готовы их с Вами обсудить. Ожидайте звонок от специалиста.'),
+          ],
+          options: [],
+        };
+      default:
+        return {
+          messages: [createChatMessage('bot', 'В ближайшее время специалист с Вами свяжется!')],
+          options: [],
+        };
+    }
+  };
+
+  const handleOptionSelect = (option) => {
+    const nextBranch = applyChatBranch(option.id);
+    setRetentionMessages((prev) => [
+      ...prev,
+      createChatMessage('user', option.label),
+      ...nextBranch.messages,
+    ]);
+    setChatOptions(nextBranch.options);
+  };
+
+  const handleRetentionSubmit = (prefilledMessage) => {
     const message = (prefilledMessage ?? retentionInput).trim();
 
-    if (!message || !clientProfile || !riskAnalysis) {
+    if (!message) {
       return;
     }
 
-    setIsRetentionLoading(true);
-    setRetentionMessages((prev) => [...prev, { type: 'user', content: message }]);
+    setRetentionMessages((prev) => [
+      ...prev,
+      createChatMessage('user', message),
+      createChatMessage('bot', 'В ближайшее время специалист с Вами свяжется!'),
+    ]);
     setRetentionInput('');
-
-    try {
-      const response = await fetch(`${API_URL}/retention-chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          client_id: clientProfile.client_id,
-          client_name: clientProfile.full_name,
-          risk_level: riskAnalysis.risk_level,
-          message,
-        }),
-      });
-
-      const payload = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        throw new Error(payload?.detail || 'Не удалось получить ответ удерживающего бота.');
-      }
-
-      setRetentionMessages((prev) => [
-        ...prev,
-        { type: 'bot', content: payload.reply },
-        ...payload.next_steps.map((item) => ({ type: 'bot-tip', content: item })),
-      ]);
-    } catch (error) {
-      setRetentionMessages((prev) => [
-        ...prev,
-        {
-          type: 'bot',
-          content: `Удерживающий бот временно недоступен. ${error.message}`,
-        },
-      ]);
-    } finally {
-      setIsRetentionLoading(false);
-    }
+    setChatOptions([]);
   };
 
   return (
@@ -401,69 +515,64 @@ function App() {
             <div className="dialog-header">
               <div>
                 <span className="section-label">Диалог</span>
-                <h3 id="assistant-dialog-title">
-                  {clientProfile?.retention_dialog_enabled && riskAnalysis
-                    ? `Поддержка для сценария ${scenarioLabels[riskAnalysis.risk_level]?.toLowerCase()}`
-                    : 'Диалог с ботом'}
-                </h3>
+                <h3 id="assistant-dialog-title">СберАссистент</h3>
               </div>
               <button type="button" className="icon-btn dialog-close" onClick={closeBotDialog} aria-label="Закрыть диалог">
                 ×
               </button>
             </div>
 
-            <div className="retention-layout dialog-layout">
-              <div className="retention-chat">
-                {clientProfile?.retention_dialog_enabled && riskAnalysis ? (
-                  retentionMessages.map((message, index) => (
-                    <article
-                      key={`${message.content}-${index}`}
-                      className={`retention-message retention-message-${message.type}`}
-                    >
-                      <p>{message.content}</p>
-                    </article>
-                  ))
-                ) : (
-                  <article className="retention-message retention-message-bot">
-                    <p>Для этого клиента отдельный сценарий сопровождения сейчас не требуется.</p>
+            <div className="chat-support-shell">
+              <a className="dialog-payment-link" href={DEBT_PAYMENT_LINK}>
+                Перейти к внесению задолженности
+              </a>
+
+              <div className="retention-chat retention-chat-single">
+                {retentionMessages.map((message, index) => (
+                  <article
+                    key={`${message.type}-${index}-${message.content}`}
+                    className={`retention-message retention-message-${message.type}`}
+                  >
+                    {message.title && <strong className="retention-warning-title">{message.title}</strong>}
+                    {message.content ? <p>{message.content}</p> : null}
+                    {message.paragraphs?.map((paragraph) => (
+                      <p key={paragraph}>{paragraph}</p>
+                    ))}
+                    {message.link ? (
+                      <a className="dialog-inline-link" href={message.link.href}>
+                        {message.link.label}
+                      </a>
+                    ) : null}
+                    {message.footer ? <p>{message.footer}</p> : null}
                   </article>
-                )}
+                ))}
               </div>
 
-              <div className="retention-side">
-                <p className="assistant-note">
-                  {clientProfile?.retention_dialog_enabled
-                    ? clientProfile.retention_summary
-                    : 'Дополнительный диалог будет доступен только при необходимости сопровождения.'}
-                </p>
+              {chatOptions.length > 0 && (
+                <div className="retention-quick-replies retention-quick-replies-chat">
+                  {chatOptions.map((option) => (
+                    <button key={option.id} type="button" className="ghost-chip" onClick={() => handleOptionSelect(option)}>
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              )}
 
-                {clientProfile?.retention_dialog_enabled && (
-                  <>
-                    <div className="retention-quick-replies">
-                      {clientProfile.retention_quick_replies.map((item) => (
-                        <button key={item} type="button" className="ghost-chip" onClick={() => handleRetentionSubmit(item)}>
-                          {item}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="retention-form">
-                      <textarea
-                        value={retentionInput}
-                        onChange={(event) => setRetentionInput(event.target.value)}
-                        rows={4}
-                        placeholder="Введите сообщение"
-                      />
-                      <button
-                        type="button"
-                        className="primary-btn retention-submit"
-                        onClick={() => handleRetentionSubmit()}
-                        disabled={!retentionInput.trim() || isRetentionLoading}
-                      >
-                        {isRetentionLoading ? 'Отправляем...' : 'Отправить'}
-                      </button>
-                    </div>
-                  </>
-                )}
+              <div className="retention-form retention-form-chat">
+                <textarea
+                  value={retentionInput}
+                  onChange={(event) => setRetentionInput(event.target.value)}
+                  rows={3}
+                  placeholder="Введите сообщение..."
+                />
+                <button
+                  type="button"
+                  className="primary-btn retention-submit"
+                  onClick={() => handleRetentionSubmit()}
+                  disabled={!retentionInput.trim() || isRetentionLoading}
+                >
+                  {isRetentionLoading ? 'Отправляем...' : 'Отправить'}
+                </button>
               </div>
             </div>
           </section>

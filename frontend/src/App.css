@@ -629,6 +629,31 @@ body {
   background: linear-gradient(180deg, rgba(250, 252, 255, 0.98) 0%, rgba(255, 255, 255, 0.94) 100%);
 }
 
+.chat-support-shell {
+  width: min(100%, 720px);
+  margin: 0 auto;
+  display: grid;
+  gap: 16px;
+}
+
+.dialog-payment-link,
+.dialog-inline-link {
+  color: var(--sber-green-dark);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.dialog-payment-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 54px;
+  padding: 14px 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(33, 160, 56, 0.16);
+  background: linear-gradient(180deg, rgba(234, 247, 237, 0.98) 0%, rgba(224, 242, 228, 0.92) 100%);
+}
+
 .retention-layout {
   display: grid;
   grid-template-columns: 1.15fr 0.85fr;
@@ -651,6 +676,11 @@ body {
   min-height: 420px;
 }
 
+.retention-chat-single {
+  min-height: 520px;
+  padding: 20px;
+}
+
 .retention-message {
   max-width: 90%;
   padding: 16px 18px;
@@ -660,6 +690,10 @@ body {
 
 .retention-message p {
   margin: 0;
+}
+
+.retention-message p + p {
+  margin-top: 10px;
 }
 
 .retention-message-bot {
@@ -677,6 +711,18 @@ body {
   border: 1px dashed rgba(21, 122, 43, 0.18);
 }
 
+.retention-message-warning {
+  max-width: 100%;
+  background: linear-gradient(180deg, rgba(255, 248, 224, 0.98) 0%, rgba(255, 255, 255, 0.96) 100%);
+  border: 1px solid rgba(255, 184, 46, 0.24);
+}
+
+.retention-warning-title {
+  display: block;
+  margin-bottom: 10px;
+  color: #8a5c00;
+}
+
 .retention-side {
   display: grid;
   gap: 18px;
@@ -689,18 +735,23 @@ body {
   gap: 12px;
 }
 
+.retention-quick-replies-chat {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .ghost-chip {
   width: 100%;
-  min-height: 72px;
+  min-height: 48px;
   border: 1px solid rgba(33, 160, 56, 0.16);
-  border-radius: 24px;
+  border-radius: 16px;
   background: linear-gradient(180deg, rgba(231, 245, 234, 0.98) 0%, rgba(221, 241, 226, 0.92) 100%);
   color: var(--sber-green-dark);
-  padding: 16px 18px;
+  padding: 8px 12px;
   cursor: pointer;
   font-weight: 700;
-  font-size: 1rem;
-  line-height: 1.35;
+  font-size: 0.88rem;
+  line-height: 1.2;
   text-align: center;
   display: grid;
   place-items: center;
@@ -718,6 +769,11 @@ body {
   gap: 12px;
 }
 
+.retention-form-chat {
+  grid-template-columns: 1fr auto;
+  align-items: end;
+}
+
 .retention-form textarea {
   width: 100%;
   border: 1px solid rgba(19, 40, 28, 0.1);
@@ -731,6 +787,11 @@ body {
 
 .retention-submit {
   width: 100%;
+}
+
+.retention-form-chat .retention-submit {
+  width: auto;
+  min-width: 160px;
 }
 
 .dialog-backdrop {
@@ -788,6 +849,11 @@ body {
   .retention-layout,
   .dialog-layout,
   .assistant-insights-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .retention-quick-replies-chat,
+  .retention-form-chat {
     grid-template-columns: 1fr;
   }
 
